@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.6)
-project(odometryExample C CXX)
+project(simpleOdometry C CXX)
 
 set(GTSAM_DIR "/home/km/libs/gtsam-3.2.1/build")
 find_package(GTSAM REQUIRED)

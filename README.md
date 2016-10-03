@@ -14,7 +14,7 @@ cd simpleRotation
 mkdir build && cd build
 ```
 
-Edit the following line in `CMakeLists.txt` and replace the value of the variable `GTSAM_DIR` with the location of your GTSAM installation. For example
+Edit the following line in `CMakeLists.txt` and replace the value of the variable `GTSAM_DIR` with the location of your GTSAM installation. For example, on line 4 of `CMakeLists.txt` inside the `simpleRotation` directory,
 
 ```
 set(GTSAM_DIR "/home/km/libs/gtsam-3.2.1/build")

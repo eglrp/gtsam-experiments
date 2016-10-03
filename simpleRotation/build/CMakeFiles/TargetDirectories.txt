@@ -1,1 +1,0 @@
-/home/km/code/gtsam-experiments/simpleRotation/build/CMakeFiles/simpleRotation.dir

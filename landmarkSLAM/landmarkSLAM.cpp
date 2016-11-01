@@ -78,9 +78,18 @@ int main(int argc, char **argv){
   graph->push_back(PriorFactor<Pose2>(0, priorMean, priorNoise));
 
 
+  /*
+   * Your code here
+   *
 
-  // Your code here
+   * In one version of the code, use the Gauss-Newton optimizer
+   * In the second version of the code, use the Levenberg-Marquardt optimizer
 
+   * NOTE: Do NOT create separate files for the Gauss-Newton and the Levenberg-Marquardt versions.
+   *       Simply comment out one of the versions and keep the other uncommented.
+   */
+
+  
 
   return 0;
 }

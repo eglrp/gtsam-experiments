@@ -9,3 +9,6 @@ link_directories(${GTSAM_LIBRARY_DIRS})
 
 add_executable(landmarkSLAM landmarkSLAM.cpp)
 target_link_libraries(landmarkSLAM gtsam)
+
+add_executable(landmarkISAM landmarkISAM.cpp)
+target_link_libraries(landmarkISAM gtsam)

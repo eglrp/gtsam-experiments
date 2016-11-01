@@ -1,28 +1,14 @@
-/* ----------------------------------------------------------------------------
-
- * GTSAM Copyright 2010, Georgia Tech Research Corporation, 
- * Atlanta, Georgia 30332-0415
- * All Rights Reserved
- * Authors: Frank Dellaert, et al. (see THANKS for the full author list)
-
- * See LICENSE for the license information
-
- * -------------------------------------------------------------------------- */
-
 /**
- * @file PlanarSLAMExample.cpp
- * @brief Simple robotics example using odometry measurements and bearing-range (laser) measurements
- * @author Alex Cunningham
+ * @file landmarkSLAM.cpp
+ * @brief Simple SLAM example using odometry measurements and bearing-range (laser) measurements
+ * @author J. Krishna Murthy
  */
 
 /**
  * A simple 2D planar slam example with landmarks
- *  - The robot and landmarks are on a 2 meter grid
- *  - Robot poses are facing along the X axis (horizontal, to the right in 2D)
- *  - The robot moves 2 meters each step
- *  - We have full odometry between poses
- *  - We have bearing and range information for measurements
- *  - Landmarks are 2 meters away from the robot trajectory
+ *  - Data from the robot's run (odometry and range-bearing observations) are present in example.graph
+ *  - We use a BetweenFactor to represent an odometry observation
+ *  - We use a BearingRangeFactor to represent a range-bearing observation
  */
 
 // As this is a planar SLAM example, we will use Pose2 variables (x, y, theta) to represent
@@ -65,77 +51,36 @@
 // for each variable, held in a Values container.
 #include <gtsam/nonlinear/Values.h>
 
+// Utilities to read a .graph file and convert to a factor graph format
+#include <gtsam/slam/dataset.h>
+
 
 using namespace std;
 using namespace gtsam;
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv){
 
-  // Create a factor graph
-  NonlinearFactorGraph graph;
+  // Input .graph filename
+  string filename = "example.graph";
 
-  // Create the keys we need for this simple example
-  static Symbol x1('x',1), x2('x',2), x3('x',3);
-  static Symbol l1('l',1), l2('l',2);
+  // Construct a nonlinear factor graph from the .graph file
+  NonlinearFactorGraph::shared_ptr graph;
+  Values::shared_ptr initial;
+  SharedDiagonal model = noiseModel::Diagonal::Sigmas((Vector(3) << 0.05, 0.05, 2 * M_PI / 180.0));
+  boost::tie(graph, initial) = load2D(filename, model);
 
-  // Add a prior on pose x1 at the origin. A prior factor consists of a mean and a noise model (covariance matrix)
-  Pose2 prior(0.0, 0.0, 0.0); // prior mean is at origin
-  noiseModel::Diagonal::shared_ptr priorNoise = noiseModel::Diagonal::Sigmas((Vector(3) << 0.3, 0.3, 0.1)); // 30cm std on x,y, 0.1 rad on theta
-  graph.add(PriorFactor<Pose2>(x1, prior, priorNoise)); // add directly to graph
+  // Print the initial estimate
+  // initial->print("Initial estimate: ");
 
-  // Add two odometry factors
-  Pose2 odometry(2.0, 0.0, 0.0); // create a measurement for both factors (the same in this case)
-  noiseModel::Diagonal::shared_ptr odometryNoise = noiseModel::Diagonal::Sigmas((Vector(3) << 0.2, 0.2, 0.1)); // 20cm std on x,y, 0.1 rad on theta
-  graph.add(BetweenFactor<Pose2>(x1, x2, odometry, odometryNoise));
-  graph.add(BetweenFactor<Pose2>(x2, x3, odometry, odometryNoise));
+  // Add a Gaussian prior on the first pose (assumed to be at the origin, along the positive X-axis)
+  Pose2 priorMean(0.0, 0.0, 0.0);
+  SharedDiagonal priorNoise = noiseModel::Diagonal::Sigmas((Vector(3) << 0.01, 0.01, 0.01));
+  graph->push_back(PriorFactor<Pose2>(0, priorMean, priorNoise));
 
-  // Add Range-Bearing measurements to two different landmarks
-  // create a noise model for the landmark measurements
-  noiseModel::Diagonal::shared_ptr measurementNoise = noiseModel::Diagonal::Sigmas((Vector(2) << 0.1, 0.2)); // 0.1 rad std on bearing, 20cm on range
-  // create the measurement values - indices are (pose id, landmark id)
-  Rot2 bearing11 = Rot2::fromDegrees(45),
-       bearing21 = Rot2::fromDegrees(90),
-       bearing32 = Rot2::fromDegrees(90);
-  double range11 = std::sqrt(4.0+4.0),
-         range21 = 2.0,
-         range32 = 2.0;
 
-  // Add Bearing-Range factors
-  graph.add(BearingRangeFactor<Pose2, Point2>(x1, l1, bearing11, range11, measurementNoise));
-  graph.add(BearingRangeFactor<Pose2, Point2>(x2, l1, bearing21, range21, measurementNoise));
-  graph.add(BearingRangeFactor<Pose2, Point2>(x3, l2, bearing32, range32, measurementNoise));
 
-  // Print
-  graph.print("Factor Graph:\n");
+  // Your code here
 
-  // Create (deliberately inaccurate) initial estimate
-  Values initialEstimate;
-  initialEstimate.insert(x1, Pose2(0.5, 0.0, 0.2));
-  initialEstimate.insert(x2, Pose2(2.3, 0.1,-0.2));
-  initialEstimate.insert(x3, Pose2(4.1, 0.1, 0.1));
-  initialEstimate.insert(l1, Point2(1.8, 2.1));
-  initialEstimate.insert(l2, Point2(4.1, 1.8));
-
-  // Print
-  initialEstimate.print("Initial Estimate:\n");
-
-  // Optimize using Levenberg-Marquardt optimization. The optimizer
-  // accepts an optional set of configuration parameters, controlling
-  // things like convergence criteria, the type of linear system solver
-  // to use, and the amount of information displayed during optimization.
-  // Here we will use the default set of parameters.  See the
-  // documentation for the full set of parameters.
-  LevenbergMarquardtOptimizer optimizer(graph, initialEstimate);
-  Values result = optimizer.optimize();
-  result.print("Final Result:\n");
-
-  // Calculate and print marginal covariances for all variables
-  Marginals marginals(graph, result);
-  print(marginals.marginalCovariance(x1), "x1 covariance");
-  print(marginals.marginalCovariance(x2), "x2 covariance");
-  print(marginals.marginalCovariance(x3), "x3 covariance");
-  print(marginals.marginalCovariance(l1), "l1 covariance");
-  print(marginals.marginalCovariance(l2), "l2 covariance");
 
   return 0;
 }

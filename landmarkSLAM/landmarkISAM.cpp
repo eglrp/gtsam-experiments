@@ -65,6 +65,7 @@
 using namespace std;
 using namespace gtsam;
 
+
 int main(int argc, char **argv){
 
   // Input .graph filename
@@ -129,15 +130,20 @@ int main(int argc, char **argv){
 
   }
 
+  if (nextObs == dataset.size()){
+    std::cout << "The supplied first step is past the end of the dataset." << std::endl;
+    exit(1);
+  }
+
   // If we didn't find an odometry linking to a previous pose, create a first pose and a prior
   if(!havePreviousPose){
 
     NonlinearFactorGraph newFactors;
     Values newVariables;
 
-    Pose2 priorMean(0.0, 0.0, 0.0);
     SharedDiagonal priorNoise = noiseModel::Diagonal::Sigmas((Vector(3) << 0.01, 0.01, 0.01));
-    newFactors.push_back(boost::make_shared<PriorFactor<Pose2> >(firstPose, priorMean, priorNoise));
+    // newFactors.push_back(boost::make_shared<PriorFactor<Pose2> >(firstPose, Pose2(), priorNoise));
+    newFactors.push_back(boost::make_shared<PriorFactor<Pose2> >(firstPose, Pose2(), noiseModel::Unit::Create(Pose2::Dim())));
     newVariables.insert(firstPose, Pose2());
 
     // Update the ISAM2 problem
@@ -146,7 +152,8 @@ int main(int argc, char **argv){
 
 
   // For each time step (running ISAM2)
-  for(size_t step = firstPose; nextObs < dataset.size() && (lastStep == -1 || step <= lastStep); ++step){
+  // for(size_t step = firstPose; nextObs < dataset.size() && (lastStep == -1 || step <= lastStep); ++step){
+  for(size_t step = firstPose; nextObs < dataset.size(); ++step){
 
     // Structs to hold new variables and factors
     Values newVariables;
@@ -159,6 +166,7 @@ int main(int argc, char **argv){
 
       // Get the current factor from the dataset
       NonlinearFactor::shared_ptr obsFactor = dataset[nextObs];
+      // obsFactor->print("");
 
       // If the factor corresponds to an odometry observation
       if(BetweenFactor<Pose2>::shared_ptr observation = 
@@ -180,8 +188,9 @@ int main(int argc, char **argv){
         // Initialize the new variable
         if(observation->key1() > observation->key2()){
           if(!newVariables.exists(observation->key1())){
-            if(step == 1)
+            if(step == 1){
               newVariables.insert(observation->key1(), observation->measured().inverse());
+            }
             else{
               Pose2 previousPose = isam2.calculateEstimate<Pose2>(observation->key2());
               newVariables.insert(observation->key1(), previousPose * observation->measured().inverse());
@@ -202,40 +211,63 @@ int main(int argc, char **argv){
 
       }
 
-      // // If the factor corresponds to a range-bearing observation
-      // else if(BearingRangeFactor<Pose2, Point2>::shared_ptr observation = 
-      //   boost::dynamic_pointer_cast<BearingRangeFactor<Pose2, Point2> >(obsFactor)){
+      // If the factor corresponds to a range-bearing observation
+      else if(BearingRangeFactor<Pose2, Point2>::shared_ptr observation = 
+        boost::dynamic_pointer_cast<BearingRangeFactor<Pose2, Point2> >(obsFactor)){
 
-      //   Key poseKey = observation->keys()[0];
-      //   Key lmKey = observation->keys()[1];
+        Key poseKey = observation->keys()[0];
+        Key lmKey = observation->keys()[1];
 
-      //   // Add new factor
-      //   newFactors.push_back(observation);
+        // Add new factor
+        newFactors.push_back(observation);
 
-      //   // Initialize landmark
-      //   if(!isam2.getLinearizationPoint().exists(lmKey)){
-      //     Pose2 pose;
-      //     if(isam2.getLinearizationPoint().exists(poseKey))
-      //       pose = isam2.calculateEstimate<Pose2>(poseKey);
-      //     else
-      //       pose = newVariables.at<Pose2>(poseKey);
-      //     Rot2 measuredBearing = observation->measured().first;
-      //     double measuredRange = observation->measured().second;
-      //     newVariables.insert(lmKey, 
-      //       pose.transform_from(measuredBearing.rotate(Point2(measuredRange, 0.0))));
-      //   }
+        // Initialize landmark
+        if(!newVariables.exists(lmKey) && !isam2.getLinearizationPoint().exists(lmKey)){
+          Pose2 pose;
+          if(isam2.getLinearizationPoint().exists(poseKey)){
+            pose = isam2.calculateEstimate<Pose2>(poseKey);
+          }
+          else{
+            pose = newVariables.at<Pose2>(poseKey);
+          }
+          Rot2 measuredBearing = observation->measured().first;
+          double measuredRange = observation->measured().second;
+          newVariables.insert(lmKey, 
+            pose.transform_from(measuredBearing.rotate(Point2(measuredRange, 0.0))));
+        }
 
-      // }
+        // // The below code snippet does not handle all corner cases.
+        // if(!isam2.getLinearizationPoint().exists(lmKey)){
+        //   Pose2 pose;
+        //   if(isam2.getLinearizationPoint().exists(poseKey))
+        //     pose = isam2.calculateEstimate<Pose2>(poseKey);
+        //   else
+        //     pose = newVariables.at<Pose2>(poseKey);
+        //   Rot2 measuredBearing = observation->measured().first;
+        //   double measuredRange = observation->measured().second;
+        //   newVariables.insert(lmKey, 
+        //     pose.transform_from(measuredBearing.rotate(Point2(measuredRange, 0.0))));
+        // }
 
-      // // Else, it is an unknown factor type
-      // else{
-      //   throw std::runtime_error("Unknown factor type read from data file.");
-      // }
+      }
+
+      // Else, it is an unknown factor type
+      else{
+        throw std::runtime_error("Unknown factor type read from data file.");
+      }
 
       ++ nextObs;
     }
     // Stop the timer
     // gttoc_(Collect_observations);
+
+    isam2.update(newFactors, newVariables);
+
+    if((step - firstPose) % params.relinearizeSkip == 0){
+      Values estimate(isam2.calculateEstimate());
+      estimate.print("");
+    }
+
 
   }
 
